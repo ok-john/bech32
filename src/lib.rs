@@ -1,4 +1,14 @@
-use std::str;
+// Copyright 2022 John Sahhar
+
+// Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
+// 1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
+// 2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+#![no_std]
+
+extern crate alloc;
+use alloc::{vec::Vec};
 
 const CHARSET: [u8; 32] = [113, 112, 122, 114, 121, 57, 120, 56, 103, 102, 50, 116, 118, 100, 119, 48, 115, 51, 106, 110, 53, 52, 107, 104, 99, 101, 54, 109, 117, 97, 55, 108];
 const GENERATOR: [u32; 5] = [0x3b6a57b2, 0x26508e6d, 0x1ea119fa, 0x3d4233dd, 0x2a1462b3];
@@ -19,26 +29,28 @@ fn polymod(values: Vec<u8>) -> u32 {
     return chk;
 }
 
-fn hrp_expand(hrp: &str) -> Vec<u8> {
+fn hrp_expand(hrp: &Vec<u8>) -> Vec<u8> {
     let mut ret: Vec<u8> = Vec::new();
-    let h = str::to_lowercase(hrp);
-    for c in h.chars() {
-        ret.push(c as u8 >> 5);
+    let h = hrp.to_ascii_lowercase();
+    for c in &h {
+        ret.push(*c >> 5);
     }
     ret.push(0);
-    for c in h.chars() {
-        ret.push(c as u8 & 31);
+    for c in &h {
+        ret.push(*c & 31);
     }
     return ret;
 }
 
-fn verify_checksum(hrp: &str, mut data: Vec<u8>) -> bool {
-    let mut ret: Vec<u8> = hrp_expand(hrp);
-    ret.append(&mut data);
+fn verify_checksum(hrp: &Vec<u8>, data: &Vec<u8>) -> bool {
+    let mut ret: Vec<u8> = hrp_expand(&hrp);
+    for v in data {
+        ret.push(*v);
+    }
     return polymod(ret) == 1;
 }
 
-fn create_checksum(hrp: &str, mut data: Vec<u8>) -> Vec<u8> {
+fn create_checksum(hrp: &Vec<u8>, mut data: Vec<u8>) -> Vec<u8> {
     let mut values: Vec<u8> = hrp_expand(hrp);
     let mut _add: [u8; 6] = [0, 0, 0, 0, 0, 0];
     values.append(&mut data);
@@ -83,7 +95,7 @@ fn convert_bits(data: &Vec<u8>, frombits: u8, tobits: u8, pad: bool) -> Vec<u8> 
     return ret;
 }
 
-pub fn encode(hrp: &str, data: &Vec<u8>) -> Vec<u8> {
+pub fn encode(hrp: &Vec<u8>, data: &Vec<u8>) -> Vec<u8> {
     let values: &Vec<u8> = &convert_bits(data, 8, 5, true); 
 
     if values.len() == 0 {
@@ -101,19 +113,19 @@ pub fn encode(hrp: &str, data: &Vec<u8>) -> Vec<u8> {
     }
 
     // HRP byte out of valid range
-    for c in hrp.chars() {
-        if (c as u8) < 33 || (c as u8) > 126 {
+    for c in hrp {
+        if *c < 33 || *c > 126 {
             return Vec::new();
         }
     }
 
     // Mixed case HRP
-    if hrp.to_ascii_uppercase() != hrp && hrp.to_ascii_lowercase() != hrp {
+    if hrp.to_ascii_uppercase() != *hrp && hrp.to_ascii_lowercase() != *hrp {
         return Vec::new();
     }
-
-    let is_lower: bool = hrp.to_lowercase() == hrp;
-    let mut lower = hrp.to_lowercase().as_bytes().to_vec();
+    
+    let is_lower: bool = hrp.to_ascii_lowercase() == *hrp;
+    let mut lower = hrp.to_ascii_lowercase().to_vec();
     lower.push(49);
 
     for p in values.iter() {
@@ -144,10 +156,16 @@ pub fn decode(s: Vec<u8>) -> (Vec<u8>, Vec<u8>) {
     }
 
     // Find the last occuring index of 1
-    // let mut pos: usize = 0;
-    let pos = s.iter().position(|&r| r == 49).unwrap();
+    // let pos = s.reverse() .position(|&r| r == 49).unwrap_or(0);
+    let mut pos = 0;
+    for idx in (0..s.len()-1).rev() {
+        if s[idx] == 49 {
+            pos = idx;
+            break;
+        }
+    }
 
-    // byte separator '1' at invalid position
+    // byte separator at invalid position
     if pos < 1 || pos+7 > s.len() {
         return (Vec::new(), Vec::new());
     }
@@ -163,14 +181,15 @@ pub fn decode(s: Vec<u8>) -> (Vec<u8>, Vec<u8>) {
     let lower = s.to_ascii_lowercase();
     let mut data: Vec<u8> = Vec::new();
     for c in lower[pos+1..].iter() {
-        let d = CHARSET.iter().position(|&r| r == *c).unwrap();
-        if d == usize::MAX {
-            return (Vec::new(), Vec::new());
-        }
+        let d = CHARSET.iter().position(|&r| r == *c).unwrap_or(usize::MAX);
+
+        // if d == usize::MAX {
+        //     return (Vec::new(), Vec::new());
+        // }
         data.push(d as u8);
     }
     // Invalid checksum
-    if !verify_checksum(str::from_utf8(&hrp).unwrap(), data.clone()) {
+    if !verify_checksum(&hrp, &data) {
             return (Vec::new(), Vec::new());
     }
     
@@ -182,7 +201,7 @@ mod tests {
     use super::*;
 
     fn test_encode_decode(input_hrp: &str, input_data: &str, want_encoded: &str) {
-        let got_encoded = encode(input_hrp, &input_data.as_bytes().to_vec());
+        let got_encoded = encode(&input_hrp.as_bytes().to_vec(), &input_data.as_bytes().to_vec());
         assert_eq!(want_encoded.as_bytes().to_vec(), got_encoded);
         let (got_hrp, got_decoded) = decode(got_encoded);
         assert_eq!(got_hrp, input_hrp.as_bytes().to_vec());

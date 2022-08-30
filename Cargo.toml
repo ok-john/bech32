@@ -2,7 +2,12 @@
 name = "bech32"
 version = "1.0.0"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+authors = ["John Sahhar"]
+license-file = "LICENSE"
+readme = "README.md"
+description = "A tiny implementation of the Bech32 encoding standard (BIP173)."
+keywords = ["bech32", "encoding", "decoding"]
+categories = ["encoding"] 
+repository = "https://github.com/ok-john/bech32"
 
 [dependencies]
