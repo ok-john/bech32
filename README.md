@@ -11,5 +11,5 @@ let result: Vec<u8> = bech32::encode(hrp, data);
 
 ### Decoding
 ```rust
-let (hrp: Vec<u8>, data: Vec<u8>) = bech32::decode(result);
+let (hrp: Vec<u8>, data: Vec<u8>) = bech32::decode(hrp, data);
 ```

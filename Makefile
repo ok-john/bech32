@@ -4,7 +4,10 @@ default :: build
 show ::
 	cat Makefile
 
-build ::
+fmt ::
+	rustfmt src/lib.rs
+
+build :: fmt
 	cargo build --release
 
 test ::
